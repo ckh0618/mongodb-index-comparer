@@ -2,7 +2,7 @@
 
 ## Overview
 
-This program compares the indexes and document counts of collections between two MongoDB databases. It iterates through all collections in the target database, comparing each index and the document count with its counterpart in the source database. You can also provide separate filters for the source and target databases to compare specific subsets of your data.
+This program compares the indexes and document counts of collections between two MongoDB databases. It iterates through all collections in the source database, comparing each index and the document count with its counterpart in the target database. You can also provide separate filters for the source and target databases to compare specific subsets of your data.
 
 ## Features
 
@@ -10,6 +10,7 @@ This program compares the indexes and document counts of collections between two
 - Compares document counts, with optional filters for both source and target.
 - Provides detailed reasons for any mismatches in indexes.
 - Option to hide matching indexes and counts from the output for a cleaner report.
+- Option to force create missing or mismatched indexes on the target database.
 
 ## Usage
 
@@ -41,6 +42,7 @@ go build
 | `--source.filter` | Source collection filter as a JSON string. | `{}` |
 | `--target.filter` | Target collection filter as a JSON string. | `{}` |
 | `--hide-matching` | Hide matching indexes and counts from the output. | `false` |
+| `--force-create-index` | Force create index on target if mismatch or not exists. | `false` |
 
 ### Example
 
@@ -81,6 +83,5 @@ Collection: products
   - Document Count | Match: Match (Source: 5000, Target: 5000)
   - Index: _id_                         | Match: Match
   - Index: sku_1                        | Match: Mismatch (Not in Target)
-```
-
+    - Create Index Statement: db.products.createIndex({ sku: 1 }, { name: "sku_1" })
 ```

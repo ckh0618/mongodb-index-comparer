@@ -176,8 +176,12 @@ func createIndexFromModel(ctx context.Context, db *mongo.Database, collName stri
 	if sparse, ok := indexDataMap["sparse"].(bool); ok {
 		indexModel.Options.SetSparse(sparse)
 	}
-	if expireAfterSeconds, ok := indexDataMap["expireAfterSeconds"].(int32); ok {
-		indexModel.Options.SetExpireAfterSeconds(expireAfterSeconds)
+	if expireAfterSeconds, ok := indexDataMap["expireAfterSeconds"]; ok {
+		if expireInt, err := toInt64E(expireAfterSeconds); err == nil {
+			indexModel.Options.SetExpireAfterSeconds(int32(expireInt))
+		} else {
+			log.Printf("WARN: Could not convert expireAfterSeconds to int64 for index creation on collection '%s'", collName)
+		}
 	}
 	if partialFilterExpression, ok := indexDataMap["partialFilterExpression"]; ok {
 		indexModel.Options.SetPartialFilterExpression(partialFilterExpression)
@@ -237,7 +241,7 @@ func compareIndexes(source, target bson.D) []string {
 	// 2. Compare other properties
 	compareBsonMElement(sourceMap, targetMap, "unique", &reasons)
 	compareBsonMElement(sourceMap, targetMap, "sparse", &reasons)
-	compareBsonMElement(sourceMap, targetMap, "expireAfterSeconds", &reasons)
+	compareExpireAfterSeconds(sourceMap, targetMap, &reasons)
 	compareBsonMElement(sourceMap, targetMap, "partialFilterExpression", &reasons)
 	compareBsonMElement(sourceMap, targetMap, "collation", &reasons)
 
@@ -260,6 +264,53 @@ func compareBsonMElement(source bson.M, target bson.M, key string, reasons *[]st
 			tValStr, _ := json.Marshal(targetVal)
 			*reasons = append(*reasons, fmt.Sprintf("'%s' property value mismatch (Source: %s, Target: %s)", key, sValStr, tValStr))
 		}
+	}
+}
+
+func compareExpireAfterSeconds(source bson.M, target bson.M, reasons *[]string) {
+	sourceVal, sOK := source["expireAfterSeconds"]
+	targetVal, tOK := target["expireAfterSeconds"]
+
+	if sOK != tOK {
+		*reasons = append(*reasons, fmt.Sprintf("'expireAfterSeconds' property existence mismatch (Source: %v, Target: %v)", sOK, tOK))
+		return
+	}
+
+	if sOK {
+		sInt, sErr := toInt64E(sourceVal)
+		tInt, tErr := toInt64E(targetVal)
+
+		if sErr != nil || tErr != nil || sInt != tInt {
+			sValStr, _ := json.Marshal(sourceVal)
+			tValStr, _ := json.Marshal(targetVal)
+			*reasons = append(*reasons, fmt.Sprintf("'expireAfterSeconds' property value mismatch (Source: %s, Target: %s)", sValStr, tValStr))
+		}
+	}
+}
+
+func toInt32E(v interface{}) (int32, error) {
+	switch i := v.(type) {
+	case int32:
+		return i, nil
+	case int64:
+		return int32(i), nil
+	case float64:
+		return int32(i), nil
+	default:
+		return 0, fmt.Errorf("unsupported type for toInt32E: %T", v)
+	}
+}
+
+func toInt64E(v interface{}) (int64, error) {
+	switch i := v.(type) {
+	case int32:
+		return int64(i), nil
+	case int64:
+		return i, nil
+	case float64:
+		return int64(i), nil
+	default:
+		return 0, fmt.Errorf("unsupported type for toInt64E: %T", v)
 	}
 }
 
@@ -286,8 +337,10 @@ func generateCreateIndexStatement(collName string, indexData bson.D) string {
 	if sparse, ok := indexDataMap["sparse"].(bool); ok && sparse {
 		optionsParts = append(optionsParts, "sparse: true")
 	}
-	if expireAfterSeconds, ok := indexDataMap["expireAfterSeconds"].(int32); ok {
-		optionsParts = append(optionsParts, fmt.Sprintf("expireAfterSeconds: %d", expireAfterSeconds))
+	if expireAfterSeconds, ok := indexDataMap["expireAfterSeconds"]; ok {
+		if expireInt, err := toInt64E(expireAfterSeconds); err == nil {
+			optionsParts = append(optionsParts, fmt.Sprintf("expireAfterSeconds: %d", expireInt))
+		}
 	}
 	if partialFilterExpression, ok := indexDataMap["partialFilterExpression"]; ok {
 		jsonBytes, err := bson.MarshalExtJSON(partialFilterExpression, true, false)

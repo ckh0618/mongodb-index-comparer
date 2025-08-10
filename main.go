@@ -25,6 +25,7 @@ func main() {
 	targetFilterStr := flag.String("target.filter", "{}", "Target collection filter as a JSON string")
 	hideMatching := flag.Bool("hide-matching", false, "Hide matching indexes and counts from the output")
 	forceCreateIndex := flag.Bool("force-create-index", false, "Force create index on target if mismatch or not exists")
+	compareOnlyIndex := flag.Bool("compare-only-index", false, "Compare only indexes, skip document count comparison")
 
 	flag.Parse()
 	// ------------------------------------
@@ -83,22 +84,24 @@ func main() {
 		fmt.Printf("\nCollection: %s\n", collName)
 
 		// 건수 비교
-		sourceCount, err := sourceDB.Collection(collName).CountDocuments(ctx, sourceFilter)
-		if err != nil {
-			log.Printf("WARN: Failed to count documents in source collection '%s': %v", collName, err)
-		}
-		targetCount, err := targetDB.Collection(collName).CountDocuments(ctx, targetFilter)
-		if err != nil {
-			log.Printf("WARN: Failed to count documents in target collection '%s': %v", collName, err)
-		}
+		if !*compareOnlyIndex {
+			sourceCount, err := sourceDB.Collection(collName).CountDocuments(ctx, sourceFilter)
+			if err != nil {
+				log.Printf("WARN: Failed to count documents in source collection \'%s\': %v", collName, err)
+			}
+			targetCount, err := targetDB.Collection(collName).CountDocuments(ctx, targetFilter)
+			if err != nil {
+				log.Printf("WARN: Failed to count documents in target collection \'%s\': %v", collName, err)
+			}
 
-		countMatch := "Match"
-		if sourceCount != targetCount {
-			countMatch = "Mismatch"
-		}
+			countMatch := "Match"
+			if sourceCount != targetCount {
+				countMatch = "Mismatch"
+			}
 
-		if !*hideMatching || countMatch == "Mismatch" {
-			fmt.Printf("  - Document Count | Match: %s (Source: %d, Target: %d)\n", countMatch, sourceCount, targetCount)
+			if !*hideMatching || countMatch == "Mismatch" {
+				fmt.Printf("  - Document Count | Match: %s (Source: %d, Target: %d)\n", countMatch, sourceCount, targetCount)
+			}
 		}
 
 		// 인덱스 비교

@@ -43,6 +43,7 @@ go build
 | `--target.filter` | Target collection filter as a JSON string. | `{}` |
 | `--hide-matching` | Hide matching indexes and counts from the output. | `false` |
 | `--force-create-index` | Force create index on target if mismatch or not exists. | `false` |
+| `--compare-only-index` | Compare only indexes, skip document count comparison. | `false` |
 
 ### Example
 

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"reflect"
+	"sort"
 	"strings"
 	"time"
 
@@ -69,12 +70,13 @@ func main() {
 	sourceDB := sourceClient.Database(*sourceDBName)
 	targetDB := targetClient.Database(*targetDBName)
 
-	// Target DB의 모든 Collection 목록 가져오기
-	fmt.Printf("Fetching collections from target database '%s'...\n", *targetDBName)
+	// Source DB의 모든 Collection 목록 가져오기
+	fmt.Printf("Fetching collections from source database '%s'...\n", *sourceDBName)
 	collections, err := sourceDB.ListCollectionNames(ctx, bson.D{})
 	if err != nil {
-		log.Fatalf("Failed to list collections from target DB '%s': %v", *targetDBName, err)
+		log.Fatalf("Failed to list collections from source DB '%s': %v", *sourceDBName, err)
 	}
+	sort.Strings(collections)
 
 	fmt.Printf("\n--- Comparison Details ---\n")
 	fmt.Printf("Source DB: %s (Filter: %s) | Target DB: %s (Filter: %s)\n", *sourceDBName, *sourceFilterStr, *targetDBName, *targetFilterStr)
@@ -87,11 +89,11 @@ func main() {
 		if !*compareOnlyIndex {
 			sourceCount, err := sourceDB.Collection(collName).CountDocuments(ctx, sourceFilter)
 			if err != nil {
-				log.Printf("WARN: Failed to count documents in source collection \'%s\': %v", collName, err)
+				log.Printf("WARN: Failed to count documents in source collection '%s': %v", collName, err)
 			}
 			targetCount, err := targetDB.Collection(collName).CountDocuments(ctx, targetFilter)
 			if err != nil {
-				log.Printf("WARN: Failed to count documents in target collection \'%s\': %v", collName, err)
+				log.Printf("WARN: Failed to count documents in target collection '%s': %v", collName, err)
 			}
 
 			countMatch := "Match"
@@ -109,7 +111,9 @@ func main() {
 		targetIndexMap := getIndexMap(ctx, targetDB, collName)
 
 		// 인덱스 비교 및 결과 출력
-		for name, targetIndex := range targetIndexMap {
+		targetIndexNames := sortedIndexNames(targetIndexMap)
+		for _, name := range targetIndexNames {
+			targetIndex := targetIndexMap[name]
 			if sourceIndex, exists := sourceIndexMap[name]; exists {
 				reasons := compareIndexes(sourceIndex, targetIndex)
 				if len(reasons) == 0 {
@@ -133,7 +137,9 @@ func main() {
 			}
 		}
 
-		for name, sourceIndex := range sourceIndexMap {
+		remainingSourceIndexNames := sortedIndexNames(sourceIndexMap)
+		for _, name := range remainingSourceIndexNames {
+			sourceIndex := sourceIndexMap[name]
 			fmt.Printf("  - Index: %-30s | Match: %s\n", name, "Mismatch (Not in Target)")
 			// 인덱스 생성 구문 생성
 			createIndexStatement := generateCreateIndexStatement(collName, sourceIndex)
@@ -224,10 +230,31 @@ func getIndexMap(ctx context.Context, db *mongo.Database, collName string) map[s
 			log.Printf("WARN: Failed to decode index for collection %s: %v", collName, err)
 			continue
 		}
-		indexName := index.Map()["name"].(string)
+		nameValue, exists := index.Map()["name"]
+		if !exists {
+			log.Printf("WARN: Index without name found in collection '%s' (DB: '%s')", collName, db.Name())
+			continue
+		}
+		indexName, ok := nameValue.(string)
+		if !ok || indexName == "" {
+			log.Printf("WARN: Invalid index name type/value in collection '%s' (DB: '%s'): %T", collName, db.Name(), nameValue)
+			continue
+		}
 		indexMap[indexName] = index
 	}
+	if err := cursor.Err(); err != nil {
+		log.Printf("WARN: Cursor error while reading indexes for collection '%s' in DB '%s': %v", collName, db.Name(), err)
+	}
 	return indexMap
+}
+
+func sortedIndexNames(indexMap map[string]bson.D) []string {
+	names := make([]string, 0, len(indexMap))
+	for name := range indexMap {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
 }
 
 func compareIndexes(source, target bson.D) []string {
@@ -288,19 +315,6 @@ func compareExpireAfterSeconds(source bson.M, target bson.M, reasons *[]string) 
 			tValStr, _ := json.Marshal(targetVal)
 			*reasons = append(*reasons, fmt.Sprintf("'expireAfterSeconds' property value mismatch (Source: %s, Target: %s)", sValStr, tValStr))
 		}
-	}
-}
-
-func toInt32E(v interface{}) (int32, error) {
-	switch i := v.(type) {
-	case int32:
-		return i, nil
-	case int64:
-		return int32(i), nil
-	case float64:
-		return int32(i), nil
-	default:
-		return 0, fmt.Errorf("unsupported type for toInt32E: %T", v)
 	}
 }
 

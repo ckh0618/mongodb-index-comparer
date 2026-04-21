@@ -69,11 +69,11 @@ func main() {
 	sourceDB := sourceClient.Database(*sourceDBName)
 	targetDB := targetClient.Database(*targetDBName)
 
-	// Target DB의 모든 Collection 목록 가져오기
-	fmt.Printf("Fetching collections from target database '%s'...\n", *targetDBName)
+	// Source DB의 모든 Collection 목록 가져오기
+	fmt.Printf("Fetching collections from source database '%s'...\n", *sourceDBName)
 	collections, err := sourceDB.ListCollectionNames(ctx, bson.D{})
 	if err != nil {
-		log.Fatalf("Failed to list collections from target DB '%s': %v", *targetDBName, err)
+		log.Fatalf("Failed to list collections from source DB '%s': %v", *sourceDBName, err)
 	}
 
 	fmt.Printf("\n--- Comparison Details ---\n")
@@ -288,19 +288,6 @@ func compareExpireAfterSeconds(source bson.M, target bson.M, reasons *[]string) 
 			tValStr, _ := json.Marshal(targetVal)
 			*reasons = append(*reasons, fmt.Sprintf("'expireAfterSeconds' property value mismatch (Source: %s, Target: %s)", sValStr, tValStr))
 		}
-	}
-}
-
-func toInt32E(v interface{}) (int32, error) {
-	switch i := v.(type) {
-	case int32:
-		return i, nil
-	case int64:
-		return int32(i), nil
-	case float64:
-		return int32(i), nil
-	default:
-		return 0, fmt.Errorf("unsupported type for toInt32E: %T", v)
 	}
 }
 

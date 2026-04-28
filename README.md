@@ -86,3 +86,20 @@ Collection: products
   - Index: sku_1                        | Match: Mismatch (Not in Target)
     - Create Index Statement: db.products.createIndex({ sku: 1 }, { name: "sku_1" })
 ```
+
+## Release Automation
+
+This repository includes GitHub Actions release automation.
+
+- When a new Git tag is pushed (for example, `1.0.0`), the workflow builds binaries for:
+  - macOS (`darwin/amd64`)
+  - Windows (`windows/amd64`)
+  - Linux (`linux/amd64`)
+- The binaries are automatically uploaded to a GitHub Release for that tag.
+
+### Create and push the `1.0.0` tag
+
+```bash
+git tag 1.0.0
+git push origin 1.0.0
+```

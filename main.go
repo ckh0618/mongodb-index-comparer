@@ -87,11 +87,11 @@ func main() {
 		if !*compareOnlyIndex {
 			sourceCount, err := sourceDB.Collection(collName).CountDocuments(ctx, sourceFilter)
 			if err != nil {
-				log.Printf("WARN: Failed to count documents in source collection \'%s\': %v", collName, err)
+				log.Printf("WARN: Failed to count documents in source collection '%s': %v", collName, err)
 			}
 			targetCount, err := targetDB.Collection(collName).CountDocuments(ctx, targetFilter)
 			if err != nil {
-				log.Printf("WARN: Failed to count documents in target collection \'%s\': %v", collName, err)
+				log.Printf("WARN: Failed to count documents in target collection '%s': %v", collName, err)
 			}
 
 			countMatch := "Match"

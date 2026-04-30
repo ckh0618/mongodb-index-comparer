@@ -1,88 +1,129 @@
-# MongoDB Index and Document Count Comparer
+# MongoDB Index Comparer
 
-## Overview
+소스 DB와 타깃 DB의 **컬렉션별 문서 수**와 **인덱스 정의**를 비교하고, 필요 시 타깃 인덱스를 정리/재생성할 수 있는 Go CLI 도구입니다.
 
-This program compares the indexes and document counts of collections between two MongoDB databases. It iterates through all collections in the source database, comparing each index and the document count with its counterpart in the target database. You can also provide separate filters for the source and target databases to compare specific subsets of your data.
+## 주요 기능
 
-## Features
+- 소스 DB의 컬렉션 목록을 기준으로 순회 비교
+- 컬렉션별 문서 수 비교 (`CountDocuments`)
+- 인덱스 비교
+  - key
+  - unique
+  - sparse
+  - expireAfterSeconds(TTL)
+  - partialFilterExpression
+  - collation
+- 불일치 사유를 상세 문자열로 출력
+- `--hide-matching` 옵션으로 일치 항목 숨김
+- `--compare-only-index` 옵션으로 문서 수 비교 스킵
+- `--force-create-index` 옵션으로 타깃 인덱스 자동 정리/생성
+  - 타깃에만 존재하는 인덱스는 삭제
+  - 양쪽에 동일 이름 인덱스가 있으나 속성이 다르면 타깃 인덱스 삭제 후 소스 기준으로 재생성
+  - 소스에만 존재하는 인덱스는 타깃에 생성
 
-- Compares indexes between two MongoDB databases.
-- Compares document counts, with optional filters for both source and target.
-- Provides detailed reasons for any mismatches in indexes.
-- Option to hide matching indexes and counts from the output for a cleaner report.
-- Option to force create missing or mismatched indexes on the target database.
+## 동작 방식 요약
 
-## Usage
+1. 소스/타깃 MongoDB에 연결 및 Ping
+2. 소스 DB의 컬렉션 목록 조회
+3. 각 컬렉션에 대해:
+   - (기본) 소스/타깃 문서 수 비교
+   - 소스/타깃 인덱스 맵 구성 후 이름 기준 비교
+4. 결과 출력 및 (옵션) 타깃 인덱스 변경
 
-### Prerequisites
+> 참고: 컬렉션 비교 기준은 **소스 DB에 존재하는 컬렉션**입니다.
 
-- Go 1.18 or higher.
-- Access to the source and target MongoDB instances.
+## 요구 사항
 
-### Building the Program
+- Go 1.24.5+
+- 소스/타깃 MongoDB 접근 권한
+
+## 빌드
 
 ```bash
-go build
+go build -o mongodb-index-comparer .
 ```
 
-### Running the Program
+## 실행
 
 ```bash
 ./mongodb-index-comparer [flags]
 ```
 
-### Flags
+## 옵션
 
-| Flag | Description | Default |
+| Flag | 설명 | 기본값 |
 |---|---|---|
-| `--source.uri` | Source MongoDB connection URI. | `mongodb://localhost:27017` |
-| `--target.uri` | Target MongoDB connection URI. | `mongodb://localhost:27017` |
-| `--source.db` | Source database name. | `source-db` |
-| `--target.db` | Target database name. | `target-db` |
-| `--source.filter` | Source collection filter as a JSON string. | `{}` |
-| `--target.filter` | Target collection filter as a JSON string. | `{}` |
-| `--hide-matching` | Hide matching indexes and counts from the output. | `false` |
-| `--force-create-index` | Force create index on target if mismatch or not exists. | `false` |
-| `--compare-only-index` | Compare only indexes, skip document count comparison. | `false` |
+| `--source.uri` | 소스 MongoDB URI | `mongodb://localhost:27017` |
+| `--target.uri` | 타깃 MongoDB URI | `mongodb://localhost:27017` |
+| `--source.db` | 소스 DB 이름 | `source-db` |
+| `--target.db` | 타깃 DB 이름 | `target-db` |
+| `--source.filter` | 소스 문서 수 비교용 JSON 필터(Extended JSON) | `{}` |
+| `--target.filter` | 타깃 문서 수 비교용 JSON 필터(Extended JSON) | `{}` |
+| `--hide-matching` | 일치 항목 숨김 | `false` |
+| `--force-create-index` | 타깃 인덱스 자동 정리/생성 수행 | `false` |
+| `--compare-only-index` | 문서 수 비교 생략, 인덱스만 비교 | `false` |
 
-### Example
+## 사용 예시
 
-#### Basic Comparison
+### 1) 기본 비교
+
 ```bash
-./mongodb-index-comparer --source.uri="mongodb://user:pass@source-host:27017" --source.db="production" --target.uri="mongodb://user:pass@target-host:27017" --target.db="staging" --hide-matching
+./mongodb-index-comparer \
+  --source.uri="mongodb://user:pass@source-host:27017" \
+  --source.db="production" \
+  --target.uri="mongodb://user:pass@target-host:27017" \
+  --target.db="staging"
 ```
 
-#### Comparison with Filters
-This example compares documents where the `status` field is "active" in the source and "enabled" in the target.
+### 2) 서로 다른 필터로 문서 수 비교
+
 ```bash
 ./mongodb-index-comparer \
   --source.uri="mongodb://localhost:27017" \
   --source.db="analytics" \
-  --source.filter='{"status": "active"}' \
+  --source.filter='{"status":"active"}' \
   --target.uri="mongodb://localhost:27017" \
   --target.db="analytics_archive" \
-  --target.filter='{"status": "enabled"}'
+  --target.filter='{"status":"enabled"}'
 ```
 
-## Output
+### 3) 인덱스만 비교 + 일치 항목 숨김
 
-The program outputs a detailed comparison for each collection.
-
-### Sample Output
-
+```bash
+./mongodb-index-comparer \
+  --source.db="production" \
+  --target.db="staging" \
+  --compare-only-index \
+  --hide-matching
 ```
+
+### 4) 타깃 인덱스 자동 정리/생성
+
+```bash
+./mongodb-index-comparer \
+  --source.db="production" \
+  --target.db="staging" \
+  --force-create-index
+```
+
+## 출력 예시
+
+```text
+Fetching collections from target database 'staging'...
+
 --- Comparison Details ---
 Source DB: production (Filter: {"status":"active"}) | Target DB: staging (Filter: {"status":"enabled"})
 
 Collection: users
   - Document Count | Match: Mismatch (Source: 150, Target: 145)
-  - Index: _id_                         | Match: Match
-  - Index: email_1                       | Match: Mismatch (Key mismatch (Source: map[email:1], Target: map[email:-1]))
-  - Index: username_1                   | Match: Mismatch (Not in Source)
-
-Collection: products
-  - Document Count | Match: Match (Source: 5000, Target: 5000)
-  - Index: _id_                         | Match: Match
-  - Index: sku_1                        | Match: Mismatch (Not in Target)
-    - Create Index Statement: db.products.createIndex({ sku: 1 }, { name: "sku_1" })
+  - Index: _id_                           | Match: Match
+  - Index: email_1                        | Match: Mismatch (Key mismatch (Source: [{email 1}], Target: [{email -1}]))
+  - Index: username_1                     | Match: Mismatch (Not in Target)
+    - Create Index Statement: db.users.createIndex({ username: 1 }, { name: "username_1" })
 ```
+
+## 주의사항
+
+- `--force-create-index`는 실제로 타깃 인덱스를 변경합니다. 운영 환경에서는 사전 검증 후 사용하세요.
+- 필터 파싱은 MongoDB Extended JSON 파서를 사용합니다. JSON 문법 오류 시 즉시 종료됩니다.
+- 인덱스 비교는 인덱스 이름 + 주요 속성 기반이며, 비교 대상 외 옵션은 불일치로 잡히지 않을 수 있습니다.
